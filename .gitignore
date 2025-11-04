@@ -1,0 +1,10 @@
+# ROS 2 / Colcon build artifacts
+build/
+log/
+install/
+
+# IDE files
+.vscode/
+.idea/
+
+
