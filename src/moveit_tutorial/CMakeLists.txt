@@ -25,8 +25,35 @@ ament_target_dependencies(move_group_interface_tutorial
   tf2_geometry_msgs
 )
 
+add_executable(robot_model_and_robot_state_tutorial src/robot_model_and_robot_state_tutorial.cpp)
+ament_target_dependencies(robot_model_and_robot_state_tutorial
+  rclcpp
+  moveit_ros_planning_interface
+  moveit_core
+  moveit_ros_planning
+  moveit_planners_ompl
+  moveit_task_constructor_core
+  moveit_visual_tools
+  tf2_geometry_msgs
+)
+
+add_executable(planning_scene_tutorial src/planning_scene_tutorial.cpp)
+ament_target_dependencies(planning_scene_tutorial
+  rclcpp
+  moveit_ros_planning_interface
+  moveit_core
+  moveit_ros_planning
+  moveit_planners_ompl
+  moveit_task_constructor_core
+  moveit_visual_tools
+  tf2_geometry_msgs
+)
+
+
 install(TARGETS   
   move_group_interface_tutorial
+  robot_model_and_robot_state_tutorial
+  planning_scene_tutorial
   DESTINATION lib/${PROJECT_NAME})
 
   install(DIRECTORY launch config
