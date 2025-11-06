@@ -14,6 +14,7 @@ find_package(moveit_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(shape_msgs REQUIRED)
 find_package(rviz_visual_tools REQUIRED)
+find_package(pluginlib REQUIRED)
 
 
 
@@ -67,6 +68,22 @@ ament_target_dependencies(planning_scene_ros_api_tutorial
   shape_msgs
   rviz_visual_tools
 )
+add_executable(motion_planning_api_tutorial src/motion_planning_api_tutorial.cpp)
+ament_target_dependencies(motion_planning_api_tutorial
+  rclcpp
+  moveit_ros_planning_interface
+  moveit_core
+  moveit_ros_planning
+  moveit_planners_ompl
+  moveit_task_constructor_core
+  moveit_visual_tools
+  tf2_geometry_msgs
+  moveit_msgs
+  geometry_msgs
+  shape_msgs
+  rviz_visual_tools
+  pluginlib
+)
 
 
 install(TARGETS   
@@ -74,6 +91,7 @@ install(TARGETS
   robot_model_and_robot_state_tutorial
   planning_scene_tutorial
   planning_scene_ros_api_tutorial
+  motion_planning_api_tutorial
   DESTINATION lib/${PROJECT_NAME})
 
   install(DIRECTORY launch config
