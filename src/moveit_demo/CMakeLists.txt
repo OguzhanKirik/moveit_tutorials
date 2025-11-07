@@ -28,6 +28,10 @@ ament_target_dependencies(moveit_demo
   moveit_task_constructor_core
   moveit_visual_tools
   tf2_geometry_msgs
+  moveit_msgs
+  geometry_msgs
+  shape_msgs
+  rviz_visual_tools
 )
 
 
