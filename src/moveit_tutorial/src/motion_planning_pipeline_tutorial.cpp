@@ -1,0 +1,237 @@
+#include <rclcpp/rclcpp.hpp>
+#include <pluginlib/class_loader.hpp>
+
+#include <moveit/robot_model_loader/robot_model_loader.h>
+#include <moveit/robot_state/conversions.h>
+#include <moveit/planning_pipeline/planning_pipeline.h>
+#include <moveit/planning_interface/planning_interface.h>
+#include <moveit/planning_scene_monitor/planning_scene_monitor.h>
+#include <moveit/kinematic_constraints/utils.h>
+#include <moveit_msgs/msg/display_trajectory.hpp>
+#include <moveit_msgs/msg/planning_scene.hpp>
+#include <moveit_visual_tools/moveit_visual_tools.h>
+
+static const rclcpp::Logger LOGGER = rclcpp::get_logger("motion_planning_pipeline");
+
+int main(int argc, char* argv[]){
+    
+    rclcpp::init(argc, argv);
+    rclcpp::NodeOptions node_options;
+    node_options.automatically_declare_parameters_from_overrides(true);
+    auto node = rclcpp::Node::make_shared("motion_planning_pipeline_tutorial", node_options);
+
+    rclcpp::executors::SingleThreadedExecutor executor;
+    executor.add_node(node);
+    std::thread([&executor]() { executor.spin(); }).detach();
+
+    // Instantiate a robot loader object
+    robot_model_loader::RobotModelLoaderPtr robot_model_loader(
+        new robot_model_loader::RobotModelLoader(node, "robot_description"));
+
+    //Using the RobotModelLoader, construct a planning scene monitor that will
+    //create a planning scene, monitor planning scene diffs, and apply the diffs 
+    // to its internal planning scene
+    planning_scene_monitor::PlanningSceneMonitorPtr psm(
+        new planning_scene_monitor::PlanningSceneMonitor(node, robot_model_loader));
+    
+    // Listen for planning scene messages and apply them to the internal planning scene
+    psm->startSceneMonitor();
+    // Listen to changes of world geometry, collision objects, and optionally octomaps
+    psm->startWorldGeometryMonitor();
+    //listen to joint state updates as well as changes in the attached collision objects
+    psm->startStateMonitor();
+      
+    /* We can also use the RobotModelLoader to get a robot model which contains the robot's kinematic information */
+    moveit::core::RobotModelPtr robot_model = robot_model_loader->getModel();
+    
+    
+    /* We can get the most up to date robot state from the PlanningSceneMonitor by locking the internal planning scene
+       This lock ensures that the underlying scene isn't updated while we are reading it's state.
+        RobotState's are useful for computing the forward and inverse kinematics of the robot among many other uses */
+    moveit::core::RobotStatePtr robot_state(
+        new moveit::core::RobotState(planning_scene_monitor::LockedPlanningSceneRO(psm)->getCurrentState()));
+    
+    // Create a jointmodelgorup to keep track of the current robot pose and planning group
+    const moveit::core::JointModelGroup* joint_model_group = robot_state->getJointModelGroup("panda_arm");
+
+    //Setup the PlanningPipeline object
+    planning_pipeline::PlanningPipelinePtr planning_pipeline(
+        new planning_pipeline::PlanningPipeline(robot_model, node, "ompl"));
+
+    //visuualization
+    namespace rvt = rviz_visual_tools;
+    moveit_visual_tools::MoveItVisualTools visual_tools(node, "panda_link0", "move_group_tutorial", psm);
+    visual_tools.deleteAllMarkers();
+
+    /* Remote control is an introspection tool that allows users to step through a high level script
+        via buttons and keyboard shortcuts in RViz */
+    visual_tools.loadRemoteControl();
+
+    /* RViz provides many types of markers, in this demo we will use text, cylinders, and spheres*/
+    Eigen::Isometry3d text_pose = Eigen::Isometry3d::Identity();
+    text_pose.translation().z() = 1.75;
+    visual_tools.publishText(text_pose, "Motion Planning Pipeline Demo", rvt::WHITE, rvt::XLARGE);
+
+    /* Batch publishing is used to reduce the number of messages being sent to RViz for large visualizations */
+    visual_tools.trigger();
+
+    /* We can also use visual_tools to wait for user input */
+    visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to start the demo");
+
+
+    //Pose Goal
+    //Create a moton plan request for the right arm of the panda
+    planning_interface::MotionPlanRequest req;
+    req.pipeline_id = "ompl";
+    req.planner_id = "RRTConnectkConfigDefault";
+    req.allowed_planning_time = 1.0;
+    req.max_velocity_scaling_factor = 1.0;
+    req.max_acceleration_scaling_factor = 1.0;
+    planning_interface::MotionPlanResponse res;
+    //pose
+    geometry_msgs::msg::PoseStamped pose;
+    pose.header.frame_id = "panda_link0";
+    pose.pose.position.x = 0.3;
+    pose.pose.position.y = 0.0;
+    pose.pose.position.z = 0.75;
+    pose.pose.orientation.w = 1.0;    
+
+
+    // A tolerance of 0.01 m is specified in position
+    // and 0.01 radians in orientation
+    std::vector<double> tolerance_pose(3, 0.1);
+    std::vector<double> tolerance_angle(3, 0.1);
+
+    // Create the request as a constrainst using a hepler
+    req.group_name = "panda_arm";
+    moveit_msgs::msg::Constraints pose_goal = 
+         kinematic_constraints::constructGoalConstraints("panda_link8", pose, tolerance_pose, tolerance_angle);
+    req.goal_constraints.push_back(pose_goal);
+
+    // Before planning, we wll need a rad onlz lock on the plannig scne so that it
+    //does not modify representaion while planning
+    {
+        planning_scene_monitor::LockedPlanningSceneRO lscene(psm);
+        // call the pipeline and check whether plannig succesfull
+        if (!planning_pipeline->generatePlan(lscene, req, res) || res.error_code_.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS){
+        RCLCPP_ERROR(LOGGER, "Could not compute plan successfully");
+        rclcpp::shutdown();
+        return -1;
+        }
+    }
+
+
+    // Visualize the result
+    // ^^^^^^^^^^^^^^^^^^^^
+    rclcpp::Publisher<moveit_msgs::msg::DisplayTrajectory>::SharedPtr display_publisher =
+        node->create_publisher<moveit_msgs::msg::DisplayTrajectory>("/display_planned_path", 1);
+    moveit_msgs::msg::DisplayTrajectory display_trajectory;
+
+    /* Visualize the trajectory */
+    RCLCPP_INFO(LOGGER, "Visualizing the trajectory");
+    moveit_msgs::msg::MotionPlanResponse response;
+    res.getMessage(response);
+
+    display_trajectory.trajectory_start = response.trajectory_start;
+    display_trajectory.trajectory.push_back(response.trajectory);
+    display_publisher->publish(display_trajectory);
+    visual_tools.publishTrajectoryLine(display_trajectory.trajectory.back(), joint_model_group);
+    visual_tools.trigger();
+
+    /* Wait for user input */
+    visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to continue the demo");
+    
+    // Joint Space Goals
+     /* First, set the state in the planning scene to the final state of the last plan */
+    robot_state = planning_scene_monitor::LockedPlanningSceneRO(psm)->getCurrentStateUpdated(response.trajectory_start);
+    robot_state->setJointGroupPositions(joint_model_group, response.trajectory.joint_trajectory.points.back().positions);
+    moveit::core::robotStateToRobotStateMsg(*robot_state, req.start_state);
+
+
+    // Now, setup a joint space goal
+    moveit::core::RobotState goal_state(*robot_state);
+    std::vector<double> joint_values = { -1.0, 0.7, 0.7, -1.5, -0.7, 2.0, 0.0 };
+    goal_state.setJointGroupPositions(joint_model_group, joint_values);
+    moveit_msgs::msg::Constraints joint_goal =
+            kinematic_constraints::constructGoalConstraints(goal_state, joint_model_group);
+    req.goal_constraints.clear();
+    req.goal_constraints.push_back(joint_goal);
+
+    //Before planning, rad onlz lock on the planning scene
+      {
+    planning_scene_monitor::LockedPlanningSceneRO lscene(psm);
+    /* Now, call the pipeline and check whether planning was successful. */
+    if (!planning_pipeline->generatePlan(lscene, req, res) || res.error_code_.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS)
+    {
+      RCLCPP_ERROR(LOGGER, "Could not compute plan successfully");
+      rclcpp::shutdown();
+      return -1;
+    }
+  }
+
+    /* Visualize the trajectory */
+    RCLCPP_INFO(LOGGER, "Visualizing the trajectory");
+    res.getMessage(response);
+    display_trajectory.trajectory_start = response.trajectory_start;
+    display_trajectory.trajectory.push_back(response.trajectory);
+    // Now you should see two planned trajectories in series
+    display_publisher->publish(display_trajectory);
+    visual_tools.publishTrajectoryLine(display_trajectory.trajectory.back(), joint_model_group);
+    visual_tools.trigger();
+
+    /* Wait for user input */
+    visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to continue the demo");
+
+
+    // Using a Planning Request Adapter
+    // A planning request adapter allows us to specify a series of operations that should happen
+    // either before planning or after planning
+
+    /* First, set the state in the planning scene to the final state of the last plan */
+    robot_state = planning_scene_monitor::LockedPlanningSceneRO(psm)->getCurrentStateUpdated(response.trajectory_start);
+    robot_state->setJointGroupPositions(joint_model_group, response.trajectory.joint_trajectory.points.back().positions);
+    moveit::core::robotStateToRobotStateMsg(*robot_state, req.start_state);
+
+    //now, set one of the joint slightly outside of its upper limits
+    const moveit::core::JointModel* joint_model = joint_model_group->getJointModel("panda_joint3");
+    const moveit::core::JointModel::Bounds& joint_bounds = joint_model->getVariableBounds();
+    std::vector<double> tmp_values(1, 0.0);
+    tmp_values[0] = joint_bounds[0].min_position_ - 0.01;
+    robot_state->setJointPositions(joint_model, tmp_values);
+
+    req.goal_constraints.clear();
+    req.goal_constraints.push_back(pose_goal);
+
+
+    // Before planning, we will need a Read Only lock on the planning scene so that it does not modify the world
+    // representation while planning
+    {
+        planning_scene_monitor::LockedPlanningSceneRO lscene(psm);
+        /* Now, call the pipeline and check whether planning was successful. */
+        if (!planning_pipeline->generatePlan(lscene, req, res) || res.error_code_.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS)
+        {
+        RCLCPP_ERROR(LOGGER, "Could not compute plan successfully");
+        rclcpp::shutdown();
+        return -1;
+        }
+    }
+
+    /* Visualize the trajectory */
+    RCLCPP_INFO(LOGGER, "Visualizing the trajectory");
+    res.getMessage(response);
+    display_trajectory.trajectory_start = response.trajectory_start;
+    display_trajectory.trajectory.push_back(response.trajectory);
+    /* Now you should see three planned trajectories in series*/
+    display_publisher->publish(display_trajectory);
+    visual_tools.publishTrajectoryLine(display_trajectory.trajectory.back(), joint_model_group);
+    visual_tools.trigger();
+
+    /* Wait for user input */
+    visual_tools.prompt("Press 'next' in the RvizVisualToolsGui window to finish the demo");
+
+    RCLCPP_INFO(LOGGER, "Done");
+
+    rclcpp::shutdown();
+
+    return 0;
+} 

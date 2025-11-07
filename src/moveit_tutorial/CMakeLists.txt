@@ -85,6 +85,24 @@ ament_target_dependencies(motion_planning_api_tutorial
   pluginlib
 )
 
+add_executable(motion_planning_pipeline_tutorial src/motion_planning_pipeline_tutorial.cpp)
+ament_target_dependencies(motion_planning_pipeline_tutorial
+  rclcpp
+  moveit_ros_planning_interface
+  moveit_core
+  moveit_ros_planning
+  moveit_planners_ompl
+  moveit_task_constructor_core
+  moveit_visual_tools
+  tf2_geometry_msgs
+  moveit_msgs
+  geometry_msgs
+  shape_msgs
+  rviz_visual_tools
+  pluginlib
+)
+
+
 
 install(TARGETS   
   move_group_interface_tutorial
@@ -92,6 +110,7 @@ install(TARGETS
   planning_scene_tutorial
   planning_scene_ros_api_tutorial
   motion_planning_api_tutorial
+  motion_planning_pipeline_tutorial
   DESTINATION lib/${PROJECT_NAME})
 
   install(DIRECTORY launch config
