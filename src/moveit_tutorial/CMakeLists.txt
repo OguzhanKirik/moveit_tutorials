@@ -104,6 +104,8 @@ ament_target_dependencies(motion_planning_pipeline_tutorial
 
 
 
+
+
 install(TARGETS   
   move_group_interface_tutorial
   robot_model_and_robot_state_tutorial
@@ -111,6 +113,7 @@ install(TARGETS
   planning_scene_ros_api_tutorial
   motion_planning_api_tutorial
   motion_planning_pipeline_tutorial
+  
   DESTINATION lib/${PROJECT_NAME})
 
   install(DIRECTORY launch config
