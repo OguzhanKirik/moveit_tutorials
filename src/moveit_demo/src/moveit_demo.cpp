@@ -28,6 +28,8 @@
 #include <moveit/collision_detection/collision_common.h>
 #include <moveit/robot_trajectory/robot_trajectory.h>
 
+
+#include "moveit_demo/custom_ik_solver.hpp"
 // Fix the visualization problems, there is too many rviz visual commands
 // implement a different IK method, or control method
 // implement a different planner
@@ -128,10 +130,45 @@ int main(int argc, char* argv[])
     geometry_msgs::msg::PoseStamped goal;
     goal.header.frame_id = "panda_link0";
     goal.pose.orientation.w = 1.0;
-    goal.pose.position.x = 0.5;   // reachable x
+    goal.pose.position.x = 0.2;   // reachable x
     goal.pose.position.y = 0.2;
     goal.pose.position.z = 0.6;   // high enough to avoid table
     const std::string ee_link = "panda_link8";
+
+
+    // // --- NEW: call custom IK library ---
+    // std::vector<double> ik_solution;
+    // bool ik_ok = panda_low_level_demo::computeCustomIK(
+    //                 robot_model,
+    //                 PLANNING_GROUP,
+    //                 ee_link,
+    //                 goal.pose,
+    //                 ik_solution,
+    //                 &std::cout);
+
+    // if (!ik_ok)
+    // {
+    // RCLCPP_ERROR(motion_demo->get_logger(), "Custom IK failed. Aborting.");
+    // executor.cancel();
+    // spinner.join();
+    // rclcpp::shutdown();
+    // return 1;
+    // }
+    // RCLCPP_INFO(motion_demo->get_logger(), "Custom IK succeeded.");
+
+    // // Build joint-space goal constraints from IK solution
+    // moveit_msgs::msg::Constraints goal_constraints;
+    // const auto& joint_names = joint_model_group->getVariableNames();
+    // for (std::size_t i = 0; i < joint_names.size(); ++i)
+    // {
+    // moveit_msgs::msg::JointConstraint jc;
+    // jc.joint_name = joint_names[i];
+    // jc.position = ik_solution[i];
+    // jc.tolerance_above = 0.01;
+    // jc.tolerance_below = 0.01;
+    // jc.weight = 1.0;
+    // goal_constraints.joint_constraints.push_back(jc);
+    // }
 
     auto goal_constraints =
         kinematic_constraints::constructGoalConstraints(ee_link, goal, 0.01, 0.01); // set goal threshold in joint space
@@ -233,67 +270,6 @@ int main(int argc, char* argv[])
     ctrl_pub->publish(traj_msg.joint_trajectory);
     RCLCPP_INFO(motion_demo->get_logger(), "Trajectory sent. Controller will execute it if configured.");
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-    // RCLCPP_INFO(motion_demo->get_logger(), "TRAJECTORY VISUALIZATION COMPLETE");
-    // RCLCPP_INFO(motion_demo->get_logger(), "Note: Robot shows planned path but does NOT execute it.");
-    // RCLCPP_INFO(motion_demo->get_logger(), "To execute: uncomment MoveGroupInterface section in code.");
-    // RCLCPP_INFO(motion_demo->get_logger(), "Or run with: ros2 launch panda_moveit_config demo.launch.py");
-
-    // // Step 16: Execute the trajectory using MoveGroupInterface
-    // RCLCPP_INFO(motion_demo->get_logger(), "Executing trajectory...");
-    // moveit::planning_interface::MoveGroupInterface move_group(motion_demo, PLANNING_GROUP);
-    // moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
-    
-    // // Add collision object to planning scene interface
-    // std::vector<moveit_msgs::msg::CollisionObject> collision_objects;
-    // moveit_msgs::msg::CollisionObject table;
-    // table.header.frame_id = "panda_link0";
-    // table.id = "table";
-    // table.operation = table.ADD;
-    // table.primitives.resize(1);
-    // table.primitives[0].type = shape_msgs::msg::SolidPrimitive::BOX;
-    // table.primitives[0].dimensions = {0.2, 0.2, 0.2};
-    // table.primitive_poses.resize(1);
-    // table.primitive_poses[0].position.x = 0.9;
-    // table.primitive_poses[0].position.y = 0.4;
-    // table.primitive_poses[0].position.z = 0.2;
-    // table.primitive_poses[0].orientation.w = 1.0;
-    // collision_objects.push_back(table);
-    // planning_scene_interface.addCollisionObjects(collision_objects);
-    
-    // // Set goal pose and execute
-    // geometry_msgs::msg::Pose target_pose;
-    // target_pose.orientation.w = 1.0;
-    // target_pose.position.x = 0.5;
-    // target_pose.position.y = 0.2;
-    // target_pose.position.z = 0.6;
-    // move_group.setPoseTarget(target_pose);
-    
-    // moveit::planning_interface::MoveGroupInterface::Plan plan;
-    // bool success = (move_group.plan(plan) == moveit::core::MoveItErrorCode::SUCCESS);
-    // if (success) {
-    //     RCLCPP_INFO(motion_demo->get_logger(), "Planning successful! Executing...");
-    //     auto execute_result = move_group.execute(plan);
-    //     if (execute_result == moveit::core::MoveItErrorCode::SUCCESS) {
-    //         RCLCPP_INFO(motion_demo->get_logger(), "Execution completed successfully!");
-    //     } else {
-    //         RCLCPP_ERROR(motion_demo->get_logger(), "Execution failed!");
-    //     }
-    // } else {
-    //     RCLCPP_ERROR(motion_demo->get_logger(), "Planning failed!");
-    // }
 
     // Step 17: Clean shutdown
     executor.cancel();
