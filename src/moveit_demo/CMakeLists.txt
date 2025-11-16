@@ -35,8 +35,27 @@ ament_target_dependencies(moveit_demo
 )
 
 
+
+add_executable(moveit_demo_v2 src/moveit_demo_v2.cpp)
+ament_target_dependencies(moveit_demo_v2
+  rclcpp
+  moveit_ros_planning_interface
+  moveit_core
+  moveit_ros_planning
+  moveit_planners_ompl
+  moveit_task_constructor_core
+  moveit_visual_tools
+  tf2_geometry_msgs
+  moveit_msgs
+  geometry_msgs
+  shape_msgs
+  rviz_visual_tools
+)
+
+
 install(TARGETS   
   moveit_demo
+  moveit_demo_v2
   DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY launch
